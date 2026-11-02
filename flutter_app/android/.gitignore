@@ -1,0 +1,17 @@
+/.gradle
+/captures/
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# Keep Gradle wrapper files in Git
+
+!gradle-wrapper.jar
+!gradlew
+!gradlew.bat
+
+# Never commit signing credentials
+
+key.properties
+**/*.keystore
+**/*.jks

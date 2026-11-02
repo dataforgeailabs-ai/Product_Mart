@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Razorpay Test Checkout - Hotel Supply Platform</title>
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            color: #333;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        .order-details {
+            background: #f4f6f8;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .order-details p {
+            margin: 10px 0;
+        }
+
+        button {
+            background: #3399cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f4f6f8;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Razorpay Test Payment</h2>
+
+    <div class="order-details">
+        <p><strong>Platform:</strong> Hotel Supply Platform</p>
+        <p><strong>Order Number:</strong> ORD-B2990124EA79</p>
+        <p><strong>Django Order ID:</strong> 25</p>
+        <p><strong>Amount:</strong> ₹450.00</p>
+        <p><strong>Payment Method:</strong> UPI</p>
+        <p><strong>Environment:</strong> Test Mode</p>
+    </div>
+
+    <button id="pay-button">Pay ₹450</button>
+
+    <pre id="result"></pre>
+
+    <script>
+        const razorpayKeyId = "rzp_test_TsvonvROToKiW0";
+        const razorpayOrderId = "order_TtGaz5yjfVQzyM";
+
+        const payButton = document.getElementById("pay-button");
+        const resultElement = document.getElementById("result");
+
+        payButton.addEventListener("click", function () {
+
+            if (typeof Razorpay === "undefined") {
+                resultElement.textContent =
+                    "Error: Razorpay Checkout could not load. Check your internet connection and refresh the page.";
+                return;
+            }
+
+            payButton.disabled = true;
+            resultElement.textContent = "Opening Razorpay Checkout...";
+
+            const options = {
+                key: razorpayKeyId,
+                amount: 45000,
+                currency: "INR",
+
+                name: "Hotel Supply Platform",
+                description: "Test payment for order ORD-B2990124EA79",
+
+                order_id: razorpayOrderId,
+
+                handler: function (response) {
+                    resultElement.textContent =
+                        "Razorpay payment response received:\n\n" +
+                        JSON.stringify(response, null, 2) +
+                        "\n\nIMPORTANT: This response has not yet been verified by your Django backend.";
+
+                    payButton.disabled = false;
+                },
+
+                modal: {
+                    ondismiss: function () {
+                        payButton.disabled = false;
+
+                        resultElement.textContent =
+                            "Checkout was closed. No payment confirmation was received.";
+                    }
+                },
+
+                theme: {
+                    color: "#3399cc"
+                }
+            };
+
+            try {
+                const checkout = new Razorpay(options);
+
+                checkout.on("payment.failed", function (response) {
+                    payButton.disabled = false;
+
+                    resultElement.textContent =
+                        "Payment failed:\n\n" +
+                        JSON.stringify(response.error, null, 2);
+                });
+
+                checkout.open();
+
+            } catch (error) {
+                payButton.disabled = false;
+
+                resultElement.textContent =
+                    "Unable to open Razorpay Checkout:\n" +
+                    error.message;
+            }
+        });
+    </script>
+
+</body>
+</html>

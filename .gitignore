@@ -1,0 +1,38 @@
+# Environment files and secrets
+
+.env
+.env.*
+!.env.example
+
+# Credentials and private keys
+
+*.pem
+*.key
+*.jks
+*.keystore
+secrets.json
+
+# Python environments
+
+venv/
+.venv/
+
+# Generated files
+
+**pycache**/
+*.py[cod]
+*.log
+
+# Flutter generated files
+
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE and operating system
+
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,36 @@
+# Environment variables and secrets
+
+.env
+.env.*
+
+# Allow an example environment file
+
+!.env.example
+
+# Python
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+
+venv/
+.venv/
+
+# Django
+
+db.sqlite3
+media/
+staticfiles/
+
+# IDE
+
+.vscode/
+.idea/
+
+# Test and coverage
+
+.coverage
+htmlcov/
+.pytest_cache/
