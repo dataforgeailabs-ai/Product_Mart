@@ -1,7 +1,6 @@
 class ApiConfig {
-  //static const String baseUrl = 'http://10.235.167.106:8000/api';
-  
-  static const String baseUrl = 'http://3.6.214.93/api';
+  static const String baseUrl = 'https://api.mistygo.in/api';
+
   static const String login = '$baseUrl/token/';
   static const String refreshToken = '$baseUrl/token/refresh/';
   static const String register = '$baseUrl/accounts/register/';

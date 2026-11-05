@@ -1,5 +1,7 @@
-package com.example.hotel_supply_flutter
+
+package com.dataforgeailabs.productmart
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+
