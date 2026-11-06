@@ -119,3 +119,73 @@ class HotelDetailsSerializer(serializers.ModelSerializer):
             "property_type",
         ]
         read_only_fields = ["id"]
+
+class ManagedUserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        required=False,
+        style={"input_type": "password"},
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "phone",
+            "password",
+            "role",
+            "is_active",
+        ]
+        read_only_fields = ["id", "is_active", "role"]
+
+    def validate_role(self, value):
+        request = self.context.get("request")
+
+        if value not in [User.Role.ADMIN, User.Role.DELIVERY]:
+            raise serializers.ValidationError(
+                "Only Admin and Delivery accounts can be managed here."
+            )
+
+        if request.user.role == User.Role.ADMIN:
+            if value != User.Role.DELIVERY:
+                raise serializers.ValidationError(
+                    "Admins can only manage Delivery accounts."
+                )
+
+        return value
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+
+        if not password:
+            raise serializers.ValidationError({
+                "password": "Password is required when creating a user."
+            })
+
+        user = User(**validated_data)
+        user.set_password(password)
+        user.is_staff = False
+        user.is_superuser = False
+        user.hotel = None
+        user.save()
+
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+
+        for attribute, value in validated_data.items():
+            setattr(instance, attribute, value)
+
+        if password:
+            instance.set_password(password)
+
+        instance.is_staff = False
+        instance.is_superuser = False
+        instance.hotel = None
+        instance.save()
+
+        return instance

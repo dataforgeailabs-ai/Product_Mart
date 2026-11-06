@@ -5,6 +5,9 @@ from .views import (
     CurrentUserView,
     SuperAdminTestView,
     MyHotelDetailsView,
+    ManagedUserListCreateView,
+    ManagedUserDetailView,
+    ManagedUserDeactivateView,
 )
 
 urlpatterns = [
@@ -27,5 +30,20 @@ urlpatterns = [
         "my-hotel/",
         MyHotelDetailsView.as_view(),
         name="my-hotel-details",
+    ),
+    path(
+    "manage-users/",
+    ManagedUserListCreateView.as_view(),
+    name="manage-users",
+    ),
+    path(
+        "manage-users/<int:pk>/",
+        ManagedUserDetailView.as_view(),
+        name="manage-user-detail",
+    ),
+    path(
+        "manage-users/<int:pk>/deactivate/",
+        ManagedUserDeactivateView.as_view(),
+        name="manage-user-deactivate",
     ),
 ]
