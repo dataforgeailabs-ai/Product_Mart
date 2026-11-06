@@ -12,4 +12,5 @@ class ApiConfig {
   static const String myHotel = '$baseUrl/accounts/my-hotel/';
   static const String cart = '$baseUrl/cart/';
   static const String orders = '$baseUrl/orders/';
+  static const String manageUsers = '$baseUrl/accounts/manage-users/';
 }

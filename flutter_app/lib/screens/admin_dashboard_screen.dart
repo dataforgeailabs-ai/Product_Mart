@@ -5,6 +5,7 @@ import 'admin_orders_screen.dart';
 import 'admin_products_screen.dart';
 import 'admin_categories_screen.dart';
 import 'admin_hotels_screen.dart';
+import 'admin_users_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
@@ -133,6 +134,24 @@ class AdminDashboardScreen extends StatelessWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const AdminHotelsScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          // User Management
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('User Management'),
+              subtitle: const Text(
+                'Manage administrators and delivery personnel.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminUsersScreen(),
                   ),
                 );
               },

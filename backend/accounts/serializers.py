@@ -139,7 +139,7 @@ class ManagedUserSerializer(serializers.ModelSerializer):
             "role",
             "is_active",
         ]
-        read_only_fields = ["id", "is_active", "role"]
+        read_only_fields = ["id", "is_active"]
 
     def validate_role(self, value):
         request = self.context.get("request")
@@ -189,3 +189,13 @@ class ManagedUserSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+
+    def get_fields(self):
+        fields = super().get_fields()
+
+        # Role can be selected during creation,
+        # but cannot be changed during updates.
+        if self.instance is not None:
+            fields["role"].read_only = True
+
+        return fields
