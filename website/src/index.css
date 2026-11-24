@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #C41E34;
+  --color-brand-secondary: #F0505F;
+  --color-brand-light: #FFF5F6;
+  --color-brand-dark: #9B1728;
+  --color-brand-surface: #FFFBFB;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #1a1a2e;
+  background-color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #C41E34;
+  border-radius: 3px;
+}
+
+/* Smooth transitions */
+a, button {
+  transition: all 0.2s ease;
+}
+
+/* Phone mockup styles */
+.phone-mockup {
+  position: relative;
+  display: inline-block;
+}
+
+.phone-mockup::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 44px;
+  background: linear-gradient(135deg, #C41E34, #F0505F, #C41E34);
+  z-index: -1;
+  opacity: 0.3;
+  filter: blur(16px);
+}
+
+/* Feature card hover */
+.feature-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.feature-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(196, 30, 52, 0.12);
+}
+
+/* Nav scrolled state */
+.nav-scrolled {
+  box-shadow: 0 1px 20px rgba(0,0,0,0.08);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #C41E34, #F0505F);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Step connector line */
+.step-line::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #C41E34, transparent);
+  transform: translateY(-50%);
+}
+
+@media (max-width: 768px) {
+  .step-line::after {
+    display: none;
+  }
+}

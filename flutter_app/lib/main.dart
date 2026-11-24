@@ -1,20 +1,47 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'config/api_config.dart';
+import 'services/authenticated_http_client.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/delivery_dashboard_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/hotel_registration_screen.dart';
 import 'widgets/brand_logo.dart';
 
-const FlutterSecureStorage secureStorage = FlutterSecureStorage();
+export 'services/authenticated_http_client.dart' show secureStorage;
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> logoutAndOpenLogin(
+  BuildContext context, {
+  bool tokensAlreadyCleared = false,
+}) async {
+  if (!tokensAlreadyCleared) {
+    await secureStorage.delete(key: 'access_token');
+    await secureStorage.delete(key: 'refresh_token');
+  }
+
+  if (!context.mounted) return;
+
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(
+      builder: (_) => const LoginScreen(),
+    ),
+    (route) => false,
+  );
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  AuthenticatedHttpClient.sessionExpiredHandler = () async {
+    final context = appNavigatorKey.currentContext;
+    if (context != null) {
+      await logoutAndOpenLogin(context, tokensAlreadyCleared: true);
+    }
+  };
   runApp(const MistyGoApp());
 }
 
@@ -26,6 +53,7 @@ class MistyGoApp extends StatelessWidget {
     return MaterialApp(
       title: 'Misty Go Delivery',
       debugShowCheckedModeBanner: false,
+      navigatorKey: appNavigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFC41E34),
@@ -155,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       // Verify the authenticated user's role using the backend.
-      final profileResponse = await http.get(
+      final profileResponse = await AuthenticatedHttpClient.instance.get(
         Uri.parse(ApiConfig.currentUser),
         headers: {
           'Content-Type': 'application/json',

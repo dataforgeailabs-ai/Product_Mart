@@ -1,32 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/product.dart';
+import 'authenticated_http_client.dart';
 
 class ProductService {
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
-
-  Future<Map<String, String>> _getHeaders({
-    bool authenticated = true,
-  }) async {
-    final headers = <String, String>{};
-
-    if (authenticated) {
-      final token = await _storage.read(key: 'access_token');
-
-      if (token == null || token.isEmpty) {
-        throw Exception('Authentication required. Please log in again.');
-      }
-
-      headers['Authorization'] = 'Bearer $token';
-    }
-
-    return headers;
-  }
+  Map<String, String> _jsonHeaders() =>
+      const {'Content-Type': 'application/json'};
 
   dynamic _decodeResponse(http.Response response) {
     if (response.body.isEmpty) return null;
@@ -78,10 +61,7 @@ class ProductService {
   }
 
   Future<List<Product>> getProducts() async {
-    final response = await http.get(
-      Uri.parse(ApiConfig.products),
-      headers: await _getHeaders(authenticated: false),
-    );
+    final response = await http.get(Uri.parse(ApiConfig.products));
 
     _checkResponse(response);
 
@@ -97,7 +77,6 @@ class ProductService {
   Future<Product> getProductDetails(int productId) async {
     final response = await http.get(
       Uri.parse('${ApiConfig.products}$productId/'),
-      headers: await _getHeaders(authenticated: false),
     );
 
     _checkResponse(response);
@@ -108,10 +87,7 @@ class ProductService {
   }
 
   Future<List<Map<String, dynamic>>> getCategories() async {
-    final response = await http.get(
-      Uri.parse(ApiConfig.categories),
-      headers: await _getHeaders(authenticated: false),
-    );
+    final response = await http.get(Uri.parse(ApiConfig.categories));
 
     _checkResponse(response);
 
@@ -127,12 +103,9 @@ Future<Map<String, dynamic>> createCategory({
   required String name,
   required String description,
 }) async {
-  final response = await http.post(
+  final response = await AuthenticatedHttpClient.instance.post(
     Uri.parse('${ApiConfig.categories}create/'),
-    headers: {
-      ...await _getHeaders(),
-      'Content-Type': 'application/json',
-    },
+    headers: _jsonHeaders(),
     body: jsonEncode({
       'name': name,
       'description': description,
@@ -150,12 +123,9 @@ Future<Map<String, dynamic>> updateCategory({
   required String name,
   required String description,
 }) async {
-  final response = await http.patch(
+  final response = await AuthenticatedHttpClient.instance.patch(
     Uri.parse('${ApiConfig.categories}update/$categoryId/'),
-    headers: {
-      ...await _getHeaders(),
-      'Content-Type': 'application/json',
-    },
+    headers: _jsonHeaders(),
     body: jsonEncode({
       'name': name,
       'description': description,
@@ -168,9 +138,8 @@ Future<Map<String, dynamic>> updateCategory({
 }
 
 Future<void> deleteCategory(int categoryId) async {
-  final response = await http.delete(
+  final response = await AuthenticatedHttpClient.instance.delete(
     Uri.parse('${ApiConfig.categories}delete/$categoryId/'),
-    headers: await _getHeaders(),
   );
 
   _checkResponse(response);
@@ -191,12 +160,9 @@ Future<void> deleteCategory(int categoryId) async {
     final uri = Uri.parse('${ApiConfig.products}create/');
 
     if (image == null) {
-      final response = await http.post(
+      final response = await AuthenticatedHttpClient.instance.post(
         uri,
-        headers: {
-          ...await _getHeaders(),
-          'Content-Type': 'application/json',
-        },
+        headers: _jsonHeaders(),
         body: jsonEncode({
           'category': category,
           'name': name,
@@ -220,8 +186,6 @@ Future<void> deleteCategory(int categoryId) async {
 
     final request = http.MultipartRequest('POST', uri);
 
-    request.headers.addAll(await _getHeaders());
-
     request.fields.addAll({
       'category': category.toString(),
       'name': name,
@@ -239,7 +203,8 @@ Future<void> deleteCategory(int categoryId) async {
       await http.MultipartFile.fromPath('image', image.path),
     );
 
-    final streamedResponse = await request.send();
+    final streamedResponse =
+        await AuthenticatedHttpClient.instance.send(request);
     final response = await http.Response.fromStream(streamedResponse);
 
     _checkResponse(response);
@@ -277,12 +242,9 @@ Future<void> deleteCategory(int categoryId) async {
     };
 
     if (image == null) {
-      final response = await http.patch(
+      final response = await AuthenticatedHttpClient.instance.patch(
         uri,
-        headers: {
-          ...await _getHeaders(),
-          'Content-Type': 'application/json',
-        },
+        headers: _jsonHeaders(),
         body: jsonEncode({
           'category': category,
           'name': name,
@@ -304,15 +266,14 @@ Future<void> deleteCategory(int categoryId) async {
     }
 
     final request = http.MultipartRequest('PATCH', uri);
-
-    request.headers.addAll(await _getHeaders());
     request.fields.addAll(fields);
 
     request.files.add(
       await http.MultipartFile.fromPath('image', image.path),
     );
 
-    final streamedResponse = await request.send();
+    final streamedResponse =
+        await AuthenticatedHttpClient.instance.send(request);
     final response = await http.Response.fromStream(streamedResponse);
 
     _checkResponse(response);
@@ -323,9 +284,8 @@ Future<void> deleteCategory(int categoryId) async {
   }
 
   Future<void> deleteProduct(int productId) async {
-    final response = await http.delete(
+    final response = await AuthenticatedHttpClient.instance.delete(
       Uri.parse('${ApiConfig.products}delete/$productId/'),
-      headers: await _getHeaders(),
     );
 
     _checkResponse(response);

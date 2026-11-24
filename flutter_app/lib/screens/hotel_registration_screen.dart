@@ -32,9 +32,14 @@ class _HotelRegistrationScreenState
   final _pinCodeController = TextEditingController();
   final _gstNumberController = TextEditingController();
   final _propertyTypeController = TextEditingController();
+  final _restaurantNameController = TextEditingController();
+  final _restaurantPhoneController = TextEditingController();
+  final _fssaiNumberController = TextEditingController();
+  final _restaurantDescriptionController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _partnershipRequested = false;
 
   @override
   void dispose() {
@@ -52,6 +57,10 @@ class _HotelRegistrationScreenState
     _pinCodeController.dispose();
     _gstNumberController.dispose();
     _propertyTypeController.dispose();
+    _restaurantNameController.dispose();
+    _restaurantPhoneController.dispose();
+    _fssaiNumberController.dispose();
+    _restaurantDescriptionController.dispose();
 
     super.dispose();
   }
@@ -132,7 +141,7 @@ class _HotelRegistrationScreenState
     });
 
     try {
-      final registrationData = {
+      final registrationData = <String, dynamic>{
         'username': _usernameController.text.trim(),
         'email': _emailController.text.trim(),
         'phone': _phoneController.text.trim(),
@@ -148,6 +157,16 @@ class _HotelRegistrationScreenState
         'gst_number': _gstNumberController.text.trim(),
         'property_type': _propertyTypeController.text.trim(),
       };
+      if (_partnershipRequested) {
+        registrationData.addAll({
+          'partnership_requested': true,
+          'restaurant_name': _restaurantNameController.text.trim(),
+          'restaurant_phone': _restaurantPhoneController.text.trim(),
+          'fssai_number': _fssaiNumberController.text.trim(),
+          'restaurant_description':
+              _restaurantDescriptionController.text.trim(),
+        });
+      }
 
       final response = await http.post(
         Uri.parse(ApiConfig.register),
@@ -171,9 +190,11 @@ class _HotelRegistrationScreenState
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Hotel registration successful! Please sign in.',
+              _partnershipRequested
+                  ? 'Hotel registration successful. Your restaurant partnership application is pending review. Please sign in.'
+                  : 'Hotel registration successful! Please sign in.',
             ),
             backgroundColor: Colors.green,
           ),
@@ -403,6 +424,48 @@ class _HotelRegistrationScreenState
                       label: 'Property Type',
                       icon: Icons.apartment_outlined,
                     ),
+
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _partnershipRequested,
+                      onChanged: _isLoading
+                          ? null
+                          : (value) => setState(
+                                () => _partnershipRequested = value ?? false,
+                              ),
+                      title: const Text('Apply for Restaurant Partnership'),
+                      subtitle: const Text(
+                        'Does your hotel or resort operate a restaurant? Apply to sell your food through Misty Go.',
+                      ),
+                    ),
+                    if (_partnershipRequested) ...[
+                      _buildSectionTitle('Restaurant Details'),
+                      _buildTextField(
+                        controller: _restaurantNameController,
+                        label: 'Restaurant Name (Optional)',
+                        icon: Icons.restaurant_outlined,
+                        validator: (_) => null,
+                      ),
+                      _buildTextField(
+                        controller: _restaurantPhoneController,
+                        label: 'Restaurant Contact Number',
+                        icon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      _buildTextField(
+                        controller: _fssaiNumberController,
+                        label: 'FSSAI Licence Number',
+                        icon: Icons.verified_outlined,
+                      ),
+                      _buildTextField(
+                        controller: _restaurantDescriptionController,
+                        label: 'Restaurant Description',
+                        icon: Icons.description_outlined,
+                        maxLines: 3,
+                      ),
+                    ],
 
                     const SizedBox(height: 12),
 

@@ -1,42 +1,29 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/cart_item.dart';
+import 'authenticated_http_client.dart';
 import 'cart_service.dart';
 
 class CartSyncService {
   CartSyncService({
-    FlutterSecureStorage? storage,
     CartService? cartService,
     http.Client? client,
-  })  : _storage = storage ?? const FlutterSecureStorage(),
-        _cartService = cartService ?? CartService(),
-        _client = client ?? http.Client();
+  })  : _cartService = cartService ?? CartService(),
+        _client = client ?? AuthenticatedHttpClient.instance;
 
-  final FlutterSecureStorage _storage;
   final CartService _cartService;
   final http.Client _client;
 
-  Future<Map<String, String>> _getHeaders() async {
-    final accessToken = await _storage.read(key: 'access_token');
-
-    if (accessToken == null || accessToken.isEmpty) {
-      throw Exception('Please sign in to synchronize your cart.');
-    }
-
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $accessToken',
-    };
-  }
+  Map<String, String> _getHeaders() =>
+      const {'Content-Type': 'application/json'};
 
   Future<Map<String, dynamic>> _getServerCart() async {
     final response = await _client.get(
       Uri.parse(ApiConfig.cart),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
     );
 
     if (response.statusCode != 200) {
@@ -62,7 +49,7 @@ class CartSyncService {
       return;
     }
 
-    final headers = await _getHeaders();
+    final headers = _getHeaders();
     final serverCart = await _getServerCart();
     final serverItems = serverCart['items'];
 

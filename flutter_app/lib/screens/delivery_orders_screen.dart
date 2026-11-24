@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/order.dart';
 import '../services/order_service.dart';
 import 'delivery_order_details_screen.dart';
 
@@ -11,39 +10,58 @@ class DeliveryOrdersScreen extends StatefulWidget {
   State<DeliveryOrdersScreen> createState() => _DeliveryOrdersScreenState();
 }
 
-class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
+class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen>
+    with SingleTickerProviderStateMixin {
   final OrderService _orderService = OrderService();
+  late final TabController _tabController;
 
-  List<Order> _orders = [];
+  List<Map<String, dynamic>> _checkouts = [];
   bool _isLoading = true;
   String? _errorMessage;
+  String _currentStatus = 'OUT_FOR_DELIVERY';
 
   @override
   void initState() {
     super.initState();
-    _loadOrders();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabChange);
+    _loadCheckouts();
   }
 
-  Future<void> _loadOrders() async {
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabChange);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _handleTabChange() {
+    if (_tabController.indexIsChanging) return;
+    final status =
+        _tabController.index == 0 ? 'OUT_FOR_DELIVERY' : 'DELIVERED';
+    if (status != _currentStatus) {
+      _currentStatus = status;
+      _loadCheckouts();
+    }
+  }
+
+  Future<void> _loadCheckouts() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final orders = await _orderService.getOrders();
+      final checkouts =
+          await _orderService.getMyDeliveries(status: _currentStatus);
 
       if (!mounted) return;
-
       setState(() {
-        _orders = orders
-            .where((order) => order.status == 'OUT_FOR_DELIVERY')
-            .toList();
+        _checkouts = checkouts;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
-
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -51,38 +69,60 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
     }
   }
 
-  String _formatStatus(String status) {
-    return status.replaceAll('_', ' ');
-  }
+  String _formatStatus(String status) =>
+      status.replaceAll('_', ' ');
 
-  String _formatDate(DateTime? date) {
+  String _formatDate(dynamic value) {
+    if (value == null || value.toString().isEmpty) return 'N/A';
+    final date = DateTime.tryParse(value.toString())?.toLocal();
     if (date == null) return 'N/A';
-
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/'
         '${date.year}';
   }
 
-  Widget _buildOrderCard(Order order) {
+  String _money(dynamic value) {
+    final amount = double.tryParse(value?.toString() ?? '') ?? 0;
+    return '₹${amount.toStringAsFixed(2)}';
+  }
+
+  Widget _buildCheckoutCard(Map<String, dynamic> checkout) {
+    final orders = checkout['orders'] is List
+        ? checkout['orders'] as List
+        : <dynamic>[];
+    final checkoutId = int.tryParse(checkout['id'].toString());
+    final checkoutNo = checkout['checkout_no']?.toString() ?? 'Checkout';
+    final hotelName =
+        checkout['customer_hotel_name']?.toString() ?? 'Hotel';
+    final deliveryStatus =
+        checkout['delivery_status']?.toString() ?? _currentStatus;
+    final paymentStatus =
+        checkout['payment_status']?.toString() ?? 'PENDING';
+    final payment = checkout['payment'] is Map
+        ? Map<String, dynamic>.from(checkout['payment'] as Map)
+        : <String, dynamic>{};
+    final paymentMethod = payment['method']?.toString() ?? 'N/A';
+    final createdAt = checkout['created_at'];
+    final deliveredAt = checkout['delivered_at'];
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-  final delivered = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(
-      builder: (_) => DeliveryOrderDetailsScreen(
-        orderId: order.id,
-      ),
-    ),
-  );
+        onTap: checkoutId == null || orders.isEmpty
+            ? null
+            : () async {
+                final delivered = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => DeliveryOrderDetailsScreen(
+                      checkoutId: checkoutId,
+                    ),
+                  ),
+                );
 
-  if (!mounted) return;
-
-  if (delivered == true) {
-    await _loadOrders();
-  }
-},
+                if (!mounted) return;
+                if (delivered == true) await _loadCheckouts();
+              },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -92,7 +132,7 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      order.orderNo,
+                      checkoutNo,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -100,10 +140,12 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
                   ),
                   Chip(
                     label: Text(
-                      _formatStatus(order.status),
+                      _formatStatus(deliveryStatus),
                       style: const TextStyle(fontSize: 11),
                     ),
-                    backgroundColor: Colors.orange.shade100,
+                    backgroundColor: deliveryStatus == 'DELIVERED'
+                        ? Colors.green.shade100
+                        : Colors.orange.shade100,
                   ),
                 ],
               ),
@@ -114,7 +156,7 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      order.hotelName,
+                      hotelName,
                       style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
@@ -123,9 +165,21 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
+                  const Icon(Icons.receipt_long_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Text('${orders.length} order(s) in this checkout'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
                   const Icon(Icons.calendar_today_outlined, size: 16),
                   const SizedBox(width: 8),
-                  Text(_formatDate(order.createdAt)),
+                  Text(
+                    _currentStatus == 'DELIVERED'
+                        ? 'Delivered: ${_formatDate(deliveredAt)}'
+                        : 'Created: ${_formatDate(createdAt)}',
+                  ),
                 ],
               ),
               const Divider(height: 24),
@@ -134,7 +188,7 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
                 children: [
                   const Text('Total Amount'),
                   Text(
-                    '₹${order.total.toStringAsFixed(2)}',
+                    _money(checkout['total']),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -146,17 +200,26 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Payment Status'),
+                  const Text('Payment'),
                   Text(
-                    _formatStatus(order.paymentStatus),
+                    '$paymentMethod • ${_formatStatus(paymentStatus)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: order.paymentStatus == 'PAID'
+                      color: paymentStatus == 'PAID' ||
+                              paymentStatus == 'CASH_RECEIVED'
                           ? Colors.green
                           : Colors.orange,
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'View delivery details  ›',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
@@ -179,13 +242,10 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-              ),
+              Text(_errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: _loadOrders,
+                onPressed: _loadCheckouts,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
               ),
@@ -195,23 +255,28 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
       );
     }
 
-    if (_orders.isEmpty) {
+    if (_checkouts.isEmpty) {
+      final isHistory = _currentStatus == 'DELIVERED';
       return RefreshIndicator(
-        onRefresh: _loadOrders,
+        onRefresh: _loadCheckouts,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 150),
+          children: [
+            const SizedBox(height: 150),
             Icon(
-              Icons.local_shipping_outlined,
+              isHistory
+                  ? Icons.history
+                  : Icons.local_shipping_outlined,
               size: 64,
               color: Colors.grey,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Center(
               child: Text(
-                'No deliveries available',
-                style: TextStyle(fontSize: 16),
+                isHistory
+                    ? 'No completed deliveries yet'
+                    : 'No deliveries available',
+                style: const TextStyle(fontSize: 16),
               ),
             ),
           ],
@@ -220,14 +285,13 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadOrders,
+      onRefresh: _loadCheckouts,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _orders.length,
-        itemBuilder: (context, index) {
-          return _buildOrderCard(_orders[index]);
-        },
+        itemCount: _checkouts.length,
+        itemBuilder: (context, index) =>
+            _buildCheckoutCard(_checkouts[index]),
       ),
     );
   }
@@ -240,10 +304,17 @@ class _DeliveryOrdersScreenState extends State<DeliveryOrdersScreen> {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _loadOrders,
+            onPressed: _loadCheckouts,
             icon: const Icon(Icons.refresh),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Active'),
+            Tab(text: 'History'),
+          ],
+        ),
       ),
       body: _buildBody(),
     );

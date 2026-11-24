@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/order.dart';
+import '../models/managed_user.dart';
 import '../services/order_service.dart';
+import '../services/user_service.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final int orderId;
@@ -19,6 +21,11 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 class _AdminOrderDetailsScreenState
     extends State<AdminOrderDetailsScreen> {
   final OrderService _orderService = OrderService();
+  final UserService _userService = UserService();
+
+  Map<String, dynamic>? _checkout;
+  List<ManagedUser> _deliveryUsers = [];
+  int? _selectedDeliveryUserId;
 
   Order? _order;
   bool _isLoading = true;
@@ -40,11 +47,38 @@ class _AdminOrderDetailsScreenState
     try {
       final order =
           await _orderService.getOrderDetails(widget.orderId);
+      Map<String, dynamic>? checkout;
+
+      if (order.checkoutId != null) {
+        checkout = await _orderService.getCheckoutDetails(
+          order.checkoutId!,
+        );
+
+        // Delivery users are only needed after every child order is ready.
+        if (checkout['delivery_status']?.toString() == 'READY') {
+          try {
+            final users = await _userService.getDeliveryUsers();
+            if (!mounted) return;
+
+            final assignedId = int.tryParse(
+              checkout['assigned_delivery']?.toString() ?? '',
+            );
+
+            setState(() {
+              _deliveryUsers = users;
+              _selectedDeliveryUserId = assignedId;
+            });
+          } catch (_) {
+            // Keep the order screen usable even if the user list fails.
+          }
+        }
+      }
 
       if (!mounted) return;
 
       setState(() {
         _order = order;
+        _checkout = checkout;
         _isLoading = false;
       });
     } catch (e) {
@@ -163,8 +197,11 @@ class _AdminOrderDetailsScreenState
           break;
 
         case 'OUT_FOR_DELIVERY':
-          await _orderService.updateOrderStatus(
-            _order!.id,
+          if (_checkout == null || _order!.checkoutId == null) {
+            throw Exception('Checkout information is not available.');
+          }
+          await _orderService.updateCheckoutDeliveryStatus(
+            _order!.checkoutId!,
             'OUT_FOR_DELIVERY',
             remarks: remarks,
           );
@@ -214,6 +251,145 @@ class _AdminOrderDetailsScreenState
     await _performAction(
       action,
       remarks: remarks,
+    );
+  }
+
+  Future<void> _assignDeliveryPerson() async {
+    if (_order?.checkoutId == null ||
+        _selectedDeliveryUserId == null ||
+        _isProcessing) {
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+
+    try {
+      await _orderService.assignDeliveryPerson(
+        _order!.checkoutId!,
+        _selectedDeliveryUserId!,
+      );
+
+      await _loadOrder();
+
+      if (!mounted) return;
+      _showMessage('Delivery person assigned successfully.');
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Widget _buildCheckoutDelivery() {
+    final checkout = _checkout;
+    if (checkout == null) return const SizedBox.shrink();
+
+    final deliveryStatus =
+        checkout['delivery_status']?.toString() ?? 'PENDING';
+    final assignedId = int.tryParse(
+      checkout['assigned_delivery']?.toString() ?? '',
+    );
+    final assignedName =
+        checkout['assigned_delivery_username']?.toString();
+
+    final selectedValue = _deliveryUsers.any(
+      (user) => user.id == _selectedDeliveryUserId,
+    )
+        ? _selectedDeliveryUserId
+        : null;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionTitle(
+              'Checkout & Delivery',
+              Icons.local_shipping_outlined,
+            ),
+            _buildInfoRow(
+              'Checkout Number',
+              checkout['checkout_no']?.toString() ?? '-',
+            ),
+            _buildInfoRow(
+              'Delivery Status',
+              _formatStatus(deliveryStatus),
+            ),
+            _buildInfoRow(
+              'Assigned Delivery',
+              (assignedName != null && assignedName.isNotEmpty)
+                  ? assignedName
+                  : (assignedId != null ? 'Assigned (ID: $assignedId)' : 'Not assigned'),
+            ),
+            if (deliveryStatus == 'READY' && assignedId == null) ...[
+              const SizedBox(height: 12),
+              if (_deliveryUsers.isEmpty)
+                const Text('No active delivery users available.')
+              else
+                DropdownButtonFormField<int>(
+                  initialValue: selectedValue,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Select delivery person',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _deliveryUsers.map((user) {
+                    return DropdownMenuItem<int>(
+                      value: user.id,
+                      child: Text(user.username),
+                    );
+                  }).toList(),
+                  onChanged: _isProcessing
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedDeliveryUserId = value;
+                          });
+                        },
+                ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _isProcessing ||
+                          _selectedDeliveryUserId == null
+                      ? null
+                      : _assignDeliveryPerson,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Assign Delivery Person'),
+                ),
+              ),
+            ],
+            if (deliveryStatus == 'READY' && assignedId != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _isProcessing
+                        ? null
+                        : () => _showActionDialog(
+                              title: 'Dispatch Checkout',
+                              action: 'OUT_FOR_DELIVERY',
+                              message:
+                                  'Dispatch this complete checkout to the assigned delivery person?',
+                              requireRemarks: true,
+                            ),
+                    icon: const Icon(Icons.local_shipping),
+                    label: const Text('Dispatch Checkout'),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -635,24 +811,6 @@ class _AdminOrderDetailsScreenState
       );
     }
 
-    if (order.status == 'PACKED') {
-      buttons.add(
-        FilledButton.icon(
-          onPressed: _isProcessing
-              ? null
-              : () => _showActionDialog(
-                    title: 'Dispatch Order',
-                    action: 'OUT_FOR_DELIVERY',
-                    message:
-                        'Confirm that this order is ready for delivery.',
-                    requireRemarks: true,
-                  ),
-          icon: const Icon(Icons.local_shipping),
-          label: const Text('Dispatch'),
-        ),
-      );
-    }
-
     if (order.status == 'PENDING' ||
         order.status == 'CONFIRMED') {
       buttons.add(
@@ -766,6 +924,7 @@ class _AdminOrderDetailsScreenState
           ),
           const SizedBox(height: 12),
           _buildAdminActions(order),
+          _buildCheckoutDelivery(),
           _buildOrderInformation(order),
           _buildOrderItems(order),
           _buildPriceSummary(order),

@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import '../services/authenticated_http_client.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,9 +14,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
-
   final _accountFormKey = GlobalKey<FormState>();
   final _hotelFormKey = GlobalKey<FormState>();
 
@@ -73,20 +70,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  Future<Map<String, String>> _getHeaders() async {
-    final token = await _secureStorage.read(
-      key: 'access_token',
-    );
-
-    if (token == null || token.isEmpty) {
-      throw Exception('Please sign in again.');
-    }
-
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-  }
+  Map<String, String> _getHeaders() =>
+      const {'Content-Type': 'application/json'};
 
   dynamic _decodeResponse(http.Response response) {
     try {
@@ -137,9 +122,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      final headers = await _getHeaders();
+      final headers = _getHeaders();
 
-      final accountResponse = await http.get(
+      final accountResponse = await AuthenticatedHttpClient.instance.get(
         Uri.parse(ApiConfig.currentUser),
         headers: headers,
       );
@@ -172,7 +157,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isHotelUser = role == 'HOTEL';
 
       if (_isHotelUser) {
-        final hotelResponse = await http.get(
+        final hotelResponse = await AuthenticatedHttpClient.instance.get(
           Uri.parse(ApiConfig.myHotel),
           headers: headers,
         );
@@ -245,9 +230,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
-      final response = await http.patch(
+      final response = await AuthenticatedHttpClient.instance.patch(
         Uri.parse(ApiConfig.currentUser),
-        headers: await _getHeaders(),
+        headers: _getHeaders(),
         body: jsonEncode({
           'email': _emailController.text.trim(),
           'phone': _phoneController.text.trim(),
@@ -300,9 +285,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
-      final response = await http.patch(
+      final response = await AuthenticatedHttpClient.instance.patch(
         Uri.parse(ApiConfig.myHotel),
-        headers: await _getHeaders(),
+        headers: _getHeaders(),
         body: jsonEncode({
           'name': _hotelNameController.text.trim(),
           'contact_person': _contactPersonController.text.trim(),

@@ -1,12 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../config/api_config.dart';
 import '../models/cart_item.dart';
+import '../services/authenticated_http_client.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final List<CartItem> items;
@@ -23,9 +22,6 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
-
   final TextEditingController _notesController =
       TextEditingController();
 
@@ -35,8 +31,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
 
-  int? _pendingOrderId;
-  String? _pendingOrderNo;
+  int? _pendingCheckoutId;
+  String? _pendingCheckoutNo;
 
   PaymentSuccessResponse? _pendingVerification;
 
@@ -77,7 +73,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<String> _getAccessToken() async {
-    final token = await _secureStorage.read(
+    final token = await secureStorage.read(
       key: 'access_token',
     );
 
@@ -95,7 +91,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     String token, {
     Map<String, dynamic>? body,
   }) async {
-    final response = await http.post(
+    final response = await AuthenticatedHttpClient.instance.post(
       Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
@@ -157,7 +153,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _placeOrder() async {
     if (_isSubmitting) return;
 
-    if (widget.items.isEmpty && _pendingOrderId == null) {
+    if (widget.items.isEmpty && _pendingCheckoutId == null) {
       setState(() {
         _errorMessage = 'Your cart is empty.';
       });
@@ -178,14 +174,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         return;
       }
 
-      // Retry payment using the existing pending order.
+      // Retry payment using the existing checkout.
       if (_paymentMethod == 'UPI' &&
-          _pendingOrderId != null) {
+          _pendingCheckoutId != null) {
         await _startRazorpayPayment(token);
         return;
       }
 
-      // Create a new Django order.
+      // Create a new checkout in Django.
       final response = await _postRequest(
         '${ApiConfig.orders}checkout/',
         token,
@@ -195,43 +191,44 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         },
       );
 
-      final dynamic orderData = response['order'];
+     final checkoutData = response['checkout'];
 
-      if (orderData is! Map) {
+      if (checkoutData is! Map<String, dynamic>) {
         throw Exception(
-          'The server returned an invalid order response.',
+          'Invalid checkout response from server.',
         );
       }
 
-      final int? orderId =
-          int.tryParse(orderData['id'].toString());
+      final int? checkoutId =
+          int.tryParse(checkoutData['id'].toString());
 
-      final String orderNo =
-          orderData['order_no']?.toString() ?? '';
+      final String checkoutNo =
+          checkoutData['checkout_no']?.toString() ?? '';
 
-      final double orderTotal =
-          double.tryParse(orderData['total'].toString()) ??
+      final double checkoutTotal =
+          double.tryParse(checkoutData['total'].toString()) ??
               widget.cartTotal;
 
-      if (orderId == null || orderNo.isEmpty) {
+      if (checkoutId == null || checkoutNo.isEmpty) {
         throw Exception(
-          'The order was created, but its details could not be read.',
+          'The checkout was created, but its details could not be read.',
         );
       }
 
-      // COD: Keep the existing order placement process.
+      // Save checkout information.
+      _pendingCheckoutId = checkoutId;
+      _pendingCheckoutNo = checkoutNo;
+
+      // COD: No online payment required.
       if (_paymentMethod == 'COD') {
         await _showOrderSuccess(
-          orderNo,
-          orderTotal,
+          checkoutNo,
+          checkoutTotal,
         );
         return;
       }
 
-      // UPI: Save the order details for payment retries.
-      _pendingOrderId = orderId;
-      _pendingOrderNo = orderNo;
-
+      // UPI: Initialize Razorpay payment.
       await _startRazorpayPayment(token);
     } catch (e) {
       if (!mounted) return;
@@ -252,20 +249,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _startRazorpayPayment(String token) async {
-    if (_pendingOrderId == null) {
-      throw Exception('Order information is missing.');
+    if (_pendingCheckoutId == null) {
+      throw Exception('Checkout information is missing.');
     }
 
+    // Django checkout-based payment endpoint.
     final response = await _postRequest(
-      '${ApiConfig.orders}${_pendingOrderId!}/create-payment/',
+      '${ApiConfig.orders}checkouts/${_pendingCheckoutId!}/create-payment/',
       token,
     );
 
     final String razorpayOrderId =
         response['razorpay_order_id']?.toString() ?? '';
 
+    // Django returns the Razorpay key using "key".
     final String razorpayKeyId =
-        response['razorpay_key_id']?.toString() ?? '';
+        response['key']?.toString() ?? '';
 
     final int? amount =
         int.tryParse(response['amount'].toString());
@@ -288,7 +287,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'currency': currency,
       'name': 'Misty Go Delivery',
       'order_id': razorpayOrderId,
-      'description': 'Order ${_pendingOrderNo ?? ''}',
+      'description': 'Checkout ${_pendingCheckoutNo ?? ''}',
       'method': {
         'upi': true,
       },
@@ -339,7 +338,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _verifyPayment(String token) async {
     final payment = _pendingVerification;
 
-    if (payment == null || _pendingOrderId == null) {
+    if (payment == null || _pendingCheckoutId == null) {
       throw Exception(
         'Payment verification information is missing.',
       );
@@ -353,8 +352,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
     }
 
+    // Django checkout-based verification endpoint.
     final response = await _postRequest(
-      '${ApiConfig.orders}${_pendingOrderId!}/verify-payment/',
+      '${ApiConfig.orders}checkouts/${_pendingCheckoutId!}/verify-payment/',
       token,
       body: {
         'razorpay_order_id': payment.orderId,
@@ -363,19 +363,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       },
     );
 
-    if (response['payment_status'] != 'PAID' &&
-        response['order_payment_status'] != 'PAID') {
-      throw Exception(
-        'Payment verification is not yet complete.',
-      );
-    }
-
+    // Django has verified the payment if the request succeeded.
     if (!mounted) return;
 
+    final double verifiedAmount =
+        double.tryParse(response['amount'].toString()) ??
+            widget.cartTotal;
+
     await _showOrderSuccess(
-      _pendingOrderNo ?? '',
-      double.tryParse(response['amount'].toString()) ??
-          widget.cartTotal,
+      _pendingCheckoutNo ?? '',
+      verifiedAmount,
     );
   }
 
@@ -403,8 +400,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _showOrderSuccess(
-    String orderNo,
-    double orderTotal,
+    String checkoutNo,
+    double checkoutTotal,
   ) async {
     if (!mounted) return;
 
@@ -429,10 +426,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              const Text('Order Number'),
+              const Text('Checkout Number'),
               const SizedBox(height: 4),
               SelectableText(
-                orderNo,
+                checkoutNo,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -440,7 +437,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Amount: ₹${orderTotal.toStringAsFixed(2)}',
+                'Amount: ₹${checkoutTotal.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                 ),
@@ -465,7 +462,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     if (!mounted) return;
 
-    Navigator.of(context).pop(orderNo);
+    Navigator.of(context).pop(checkoutNo);
   }
 
   @override
@@ -548,7 +545,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text('SKU: ${item.sku}'),
+                                  Text(item.itemType == 'FOOD' ? 'Food item' : 'SKU: ${item.sku}'),
                                   const SizedBox(height: 4),
                                   Text(
                                     '${item.quantity} × ₹${item.price.toStringAsFixed(2)}',
@@ -602,7 +599,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     return;
                   }
 
-                  if (_pendingOrderId != null &&
+                  if (_pendingCheckoutId != null &&
                       value != 'UPI') {
                     setState(() {
                       _errorMessage =
@@ -621,7 +618,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     RadioListTile<String>(
                       value: 'COD',
                       enabled: !_isSubmitting &&
-                          _pendingOrderId == null,
+                          _pendingCheckoutId == null,
                       title: const Text('Cash on Delivery'),
                       subtitle: const Text(
                         'Pay when the order is delivered.',
@@ -660,7 +657,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             TextField(
               controller: _notesController,
               enabled: !_isSubmitting &&
-                  _pendingOrderId == null,
+                  _pendingCheckoutId == null,
               maxLines: 3,
               maxLength: 500,
               decoration: const InputDecoration(
@@ -705,7 +702,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   : Icon(
                       _pendingVerification != null
                           ? Icons.verified_outlined
-                          : _pendingOrderId != null
+                          : _pendingCheckoutId != null
                               ? Icons.refresh
                               : Icons.check_circle_outline,
                     ),
@@ -718,7 +715,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ? 'Processing...'
                       : _pendingVerification != null
                           ? 'Retry Verification'
-                          : _pendingOrderId != null
+                          : _pendingCheckoutId != null
                               ? 'Retry UPI Payment'
                               : 'Place Order · '
                                   '₹${widget.cartTotal.toStringAsFixed(2)}',

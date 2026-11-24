@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from .models import User
 
 
 class IsSuperAdmin(BasePermission):
@@ -13,7 +14,7 @@ class IsSuperAdmin(BasePermission):
             user
             and user.is_authenticated
             and user.is_active
-            and user.role == "SUPERADMIN"
+            and user.role == User.Role.SUPERADMIN
         )
 
 
@@ -29,7 +30,10 @@ class IsAdmin(BasePermission):
             user
             and user.is_authenticated
             and user.is_active
-            and user.role in ["SUPERADMIN", "ADMIN"]
+            and user.role in [
+                User.Role.SUPERADMIN,
+                User.Role.ADMIN,
+            ]
         )
 
 
@@ -45,14 +49,13 @@ class IsDelivery(BasePermission):
             user
             and user.is_authenticated
             and user.is_active
-            and user.role == "DELIVERY"
+            and user.role == User.Role.DELIVERY
         )
 
 
 class IsHotelStaff(BasePermission):
     """
-    Allow access only to active hotel staff
-    belonging to an active hotel.
+    Allow access to active customers belonging to an active hotel.
     """
 
     def has_permission(self, request, view):
@@ -64,7 +67,7 @@ class IsHotelStaff(BasePermission):
         if not user.is_active:
             return False
 
-        if user.role != "HOTEL":
+        if user.role != User.Role.HOTEL:
             return False
 
         if not user.hotel_id:

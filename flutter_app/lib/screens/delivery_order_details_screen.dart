@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../models/order.dart';
 import '../services/order_service.dart';
 
 class DeliveryOrderDetailsScreen extends StatefulWidget {
-  final int orderId;
+  final int checkoutId;
 
   const DeliveryOrderDetailsScreen({
     super.key,
-    required this.orderId,
+    required this.checkoutId,
   });
 
   @override
@@ -20,7 +19,7 @@ class _DeliveryOrderDetailsScreenState
     extends State<DeliveryOrderDetailsScreen> {
   final OrderService _orderService = OrderService();
 
-  Order? _order;
+  Map<String, dynamic>? _checkout;
   bool _isLoading = true;
   bool _isDelivering = false;
   String? _errorMessage;
@@ -28,23 +27,23 @@ class _DeliveryOrderDetailsScreenState
   @override
   void initState() {
     super.initState();
-    _loadOrder();
+    _loadCheckout();
   }
 
-  Future<void> _loadOrder() async {
+  Future<void> _loadCheckout() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final order =
-          await _orderService.getOrderDetails(widget.orderId);
+      final checkout =
+          await _orderService.getCheckoutDetails(widget.checkoutId);
 
       if (!mounted) return;
 
       setState(() {
-        _order = order;
+        _checkout = checkout;
         _isLoading = false;
       });
     } catch (e) {
@@ -57,86 +56,83 @@ class _DeliveryOrderDetailsScreenState
     }
   }
 
-  String _formatStatus(String status) {
-    return status.replaceAll('_', ' ');
-  }
+  String _formatStatus(String value) =>
+      value.replaceAll('_', ' ');
 
-  String _formatDate(DateTime? date) {
-    if (date == null) return 'N/A';
+  String _formatDateTime(dynamic value) {
+    if (value == null || value.toString().isEmpty) return 'N/A';
+
+    final date = DateTime.tryParse(value.toString())?.toLocal();
+    if (date == null) return value.toString();
 
     return '${date.day.toString().padLeft(2, '0')}/'
         '${date.month.toString().padLeft(2, '0')}/'
-        '${date.year}';
-  }
-
-  String _formatDateTime(dynamic value) {
-    if (value == null) return 'N/A';
-
-    final date = DateTime.tryParse(value.toString());
-
-    if (date == null) return value.toString();
-
-    return '${_formatDate(date)} '
+        '${date.year} '
         '${date.hour.toString().padLeft(2, '0')}:'
         '${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _money(dynamic value) {
+    final amount = double.tryParse(value?.toString() ?? '') ?? 0;
+    return '₹${amount.toStringAsFixed(2)}';
+  }
+
+  List<Map<String, dynamic>> get _orders {
+    final raw = _checkout?['orders'];
+    if (raw is! List) return [];
+
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
 
   Future<void> _markAsDelivered() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Confirm Delivery'),
-          content: const Text(
-            'Are you sure this order has been delivered successfully?',
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm Delivery'),
+        content: const Text(
+          'Confirm that the complete checkout has been delivered successfully?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, true),
-              child: const Text('Confirm Delivery'),
-            ),
-          ],
-        );
-      },
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Confirm Delivery'),
+          ),
+        ],
+      ),
     );
 
     if (confirmed != true || !mounted) return;
 
-    setState(() {
-      _isDelivering = true;
-    });
+    setState(() => _isDelivering = true);
 
     try {
-      await _orderService.updateOrderStatus(
-        widget.orderId,
+      await _orderService.updateCheckoutDeliveryStatus(
+        widget.checkoutId,
         'DELIVERED',
-        remarks: 'Order successfully delivered.',
+        remarks: 'Checkout successfully delivered.',
       );
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Order marked as delivered successfully.'),
+          content: Text('Checkout marked as delivered successfully.'),
           backgroundColor: Colors.green,
         ),
       );
 
-      // Do not fetch the order again. Delivery users can only
-      // access orders with OUT_FOR_DELIVERY status.
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
 
-      setState(() {
-        _isDelivering = false;
-      });
+      setState(() => _isDelivering = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -177,9 +173,7 @@ class _DeliveryOrderDetailsScreenState
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -187,111 +181,148 @@ class _DeliveryOrderDetailsScreenState
     );
   }
 
-  Widget _buildOrderItems(Order order) {
+  Widget _buildCheckoutSummary(Map<String, dynamic> checkout) {
+    final payment = checkout['payment'] is Map
+        ? Map<String, dynamic>.from(checkout['payment'] as Map)
+        : <String, dynamic>{};
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionTitle('Order Items'),
-            ...order.items.map((item) {
-              final productName =
-                  item['product_name']?.toString() ?? 'Product';
-
-              final quantity =
-                  item['quantity']?.toString() ?? '0';
-
-              final unitPrice =
-                  double.tryParse(item['unit_price'].toString()) ?? 0;
-
-              final lineTotal =
-                  double.tryParse(item['line_total'].toString()) ?? 0;
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            productName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '₹${lineTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '$quantity × ₹${unitPrice.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ),
-                  ],
+            Text(
+              checkout['checkout_no']?.toString() ?? 'Checkout',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _infoRow(
+              'Customer Hotel',
+              checkout['customer_hotel_name']?.toString() ?? 'N/A',
+            ),
+            _infoRow(
+              'Placed By',
+              checkout['placed_by_username']?.toString() ?? 'N/A',
+            ),
+            _infoRow(
+              'Checkout Date',
+              _formatDateTime(checkout['created_at']),
+            ),
+            _infoRow(
+              'Delivery Status',
+              _formatStatus(
+                checkout['delivery_status']?.toString() ?? 'PENDING',
+              ),
+            ),
+            _infoRow(
+              'Assigned Delivery Partner',
+              checkout['assigned_delivery_username']?.toString() ?? 'N/A',
+            ),
+            if (checkout['delivered_at'] != null)
+              _infoRow(
+                'Delivered At',
+                _formatDateTime(checkout['delivered_at']),
+              ),
+            if ((checkout['delivery_remarks'] ?? '')
+                .toString()
+                .isNotEmpty)
+              _infoRow(
+                'Delivery Remarks',
+                checkout['delivery_remarks'].toString(),
+              ),
+            const Divider(height: 24),
+            _infoRow('Total Amount', _money(checkout['total'])),
+            _infoRow(
+              'Collectable Amount',
+              _money(checkout['collectable_amount']),
+            ),
+            _infoRow(
+              'Payment Method',
+              payment['method']?.toString() ?? 'N/A',
+            ),
+            _infoRow(
+              'Payment Status',
+              _formatStatus(
+                checkout['payment_status']?.toString() ?? 'PENDING',
+              ),
+            ),
+            if (payment['collected_amount'] != null)
+              _infoRow(
+                'Collected Amount',
+                _money(payment['collected_amount']),
+              ),
+            if (payment['received_by'] != null)
+                _infoRow(
+                  'Received By',
+                  payment['received_by_username']?.toString() ??
+                      payment['received_by'].toString(),
                 ),
-              );
-            }),
+            if (payment['received_at'] != null)
+              _infoRow(
+                'Received At',
+                _formatDateTime(payment['received_at']),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPaymentDetails(Order order) {
+  Widget _buildOrderItems(Map<String, dynamic> order) {
+    final items = order['items'] is List
+        ? order['items'] as List
+        : <dynamic>[];
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionTitle('Payment Information'),
-            _infoRow(
-              'Payment Status',
-              _formatStatus(order.paymentStatus),
-            ),
-            if (order.payments.isNotEmpty)
-              ...order.payments.map((payment) {
-                return Column(
-                  children: [
-                    const Divider(),
-                    _infoRow(
-                      'Method',
-                      payment['method']?.toString() ?? 'N/A',
-                    ),
-                    _infoRow(
-                      'Amount',
-                      '₹${payment['amount'] ?? '0'}',
-                    ),
-                    _infoRow(
-                      'Payment Status',
-                      _formatStatus(
-                        payment['status']?.toString() ?? 'PENDING',
+            _sectionTitle('Items'),
+            if (items.isEmpty)
+              const Text('No items found for this order.')
+            else
+              ...items.whereType<Map>().map((rawItem) {
+                final item = Map<String, dynamic>.from(rawItem);
+                final itemName = item['product_name']?.toString() ??
+                    item['food_item_name']?.toString() ??
+                    'Item';
+                final quantity = item['quantity']?.toString() ?? '0';
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              itemName,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          Text(
+                            _money(item['line_total']),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
-                    ),
-                    if (payment['received_by'] != null)
-                      _infoRow(
-                        'Received By',
-                        payment['received_by'].toString(),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '$quantity × ${_money(item['unit_price'])}',
+                          style: const TextStyle(color: Colors.black54),
+                        ),
                       ),
-                    if (payment['received_at'] != null)
-                      _infoRow(
-                        'Received At',
-                        _formatDateTime(payment['received_at']),
-                      ),
-                  ],
+                    ],
+                  ),
                 );
               }),
           ],
@@ -300,18 +331,28 @@ class _DeliveryOrderDetailsScreenState
     );
   }
 
-  Widget _buildStatusHistory(Order order) {
+  Widget _buildOrderHistory(Map<String, dynamic> order) {
+    final history = order['status_history'] is List
+        ? order['status_history'] as List
+        : <dynamic>[];
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionTitle('Order Status History'),
-            if (order.statusHistory.isEmpty)
+            _sectionTitle('Individual Order Status History'),
+            Text(
+              order['order_no']?.toString() ?? 'Order',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            if (history.isEmpty)
               const Text('No status history available.')
             else
-              ...order.statusHistory.map((history) {
+              ...history.whereType<Map>().map((rawEntry) {
+                final entry = Map<String, dynamic>.from(rawEntry);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Row(
@@ -329,32 +370,27 @@ class _DeliveryOrderDetailsScreenState
                           children: [
                             Text(
                               _formatStatus(
-                                history['status']?.toString() ?? '',
+                                entry['status']?.toString() ?? '',
                               ),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            if (entry['changed_by_username'] != null)
+                              Text(
+                                'By: ${entry['changed_by_username']}',
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                            if ((entry['remarks'] ?? '')
+                                .toString()
+                                .isNotEmpty)
+                              Text(entry['remarks'].toString()),
+                            Text(
+                              _formatDateTime(entry['changed_at']),
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                                color: Colors.black54,
+                                fontSize: 12,
                               ),
                             ),
-                            if (history['changed_by_username'] != null)
-                              Text(
-                                'By: ${history['changed_by_username']}',
-                                style: const TextStyle(
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            if (history['remarks'] != null &&
-                                history['remarks'].toString().isNotEmpty)
-                              Text(
-                                history['remarks'].toString(),
-                              ),
-                            if (history['changed_at'] != null)
-                              Text(
-                                _formatDateTime(history['changed_at']),
-                                style: const TextStyle(
-                                  color: Colors.black54,
-                                  fontSize: 12,
-                                ),
-                              ),
                           ],
                         ),
                       ),
@@ -368,87 +404,80 @@ class _DeliveryOrderDetailsScreenState
     );
   }
 
-  Widget _buildContent(Order order) {
+  Widget _buildContent() {
+    final checkout = _checkout!;
+    final orders = _orders;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        _buildCheckoutSummary(checkout),
+        const SizedBox(height: 12),
+        Text(
+          'Individual Orders (${orders.length})',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 8),
+        if (orders.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('No individual orders found in this checkout.'),
+            ),
+          )
+        else
+          ...orders.map((order) {
+            return Column(
               children: [
-                Text(
-                  order.orderNo,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          order['order_no']?.toString() ?? 'Order',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _infoRow(
+                          'Order Type',
+                          order['order_type']?.toString() ?? 'N/A',
+                        ),
+                        _infoRow(
+                          'Seller Hotel',
+                          order['seller_hotel_name']?.toString() ?? 'Platform',
+                        ),
+                        _infoRow(
+                          'Order Status',
+                          _formatStatus(
+                            order['status']?.toString() ?? 'N/A',
+                          ),
+                        ),
+                        _infoRow(
+                          'Payment Status',
+                          _formatStatus(
+                            order['payment_status']?.toString() ?? 'N/A',
+                          ),
+                        ),
+                        _infoRow('Order Total', _money(order['total'])),
+                        const Divider(height: 24),
+                        _buildOrderItems(order),
+                      ],
+                    ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                _buildOrderHistory(order),
                 const SizedBox(height: 12),
-                _infoRow('Hotel', order.hotelName),
-                _infoRow('Order Date', _formatDate(order.createdAt)),
-                _infoRow(
-                  'Order Status',
-                  _formatStatus(order.status),
-                ),
-                _infoRow('Placed By', order.placedByUsername),
               ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildOrderItems(order),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionTitle('Price Summary'),
-                _infoRow(
-                  'Subtotal',
-                  '₹${order.subtotal.toStringAsFixed(2)}',
-                ),
-                _infoRow(
-                  'Tax',
-                  '₹${order.tax.toStringAsFixed(2)}',
-                ),
-                _infoRow(
-                  'Delivery Charge',
-                  '₹${order.deliveryCharge.toStringAsFixed(2)}',
-                ),
-                const Divider(),
-                _infoRow(
-                  'Total Amount',
-                  '₹${order.total.toStringAsFixed(2)}',
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildPaymentDetails(order),
-        const SizedBox(height: 12),
-        _buildStatusHistory(order),
-        if (order.notes.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _sectionTitle('Order Notes'),
-                  Text(order.notes),
-                ],
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 20),
-        if (order.status == 'OUT_FOR_DELIVERY')
+            );
+          }),
+        if (checkout['delivery_status'] == 'OUT_FOR_DELIVERY') ...[
+          const SizedBox(height: 8),
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
@@ -457,15 +486,11 @@ class _DeliveryOrderDetailsScreenState
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2)
                     )
                   : const Icon(Icons.check_circle_outline),
               label: Text(
-                _isDelivering
-                    ? 'Updating...'
-                    : 'Mark as Delivered',
+                _isDelivering ? 'Updating...' : 'Mark as Delivered',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
@@ -473,6 +498,7 @@ class _DeliveryOrderDetailsScreenState
               ),
             ),
           ),
+        ],
         const SizedBox(height: 20),
       ],
     );
@@ -481,9 +507,7 @@ class _DeliveryOrderDetailsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Delivery Details'),
-      ),
+      appBar: AppBar(title: const Text('Delivery Details')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
@@ -505,16 +529,16 @@ class _DeliveryOrderDetailsScreenState
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
-                          onPressed: _loadOrder,
+                          onPressed: _loadCheckout,
                           child: const Text('Retry'),
                         ),
                       ],
                     ),
                   ),
                 )
-              : _order == null
-                  ? const Center(child: Text('Order not found.'))
-                  : _buildContent(_order!),
+              : _checkout == null
+                  ? const Center(child: Text('Checkout not found.'))
+                  : _buildContent(),
     );
   }
 }

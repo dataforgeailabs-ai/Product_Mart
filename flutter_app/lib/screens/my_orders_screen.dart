@@ -1,10 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import '../services/authenticated_http_client.dart';
 
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key});
@@ -14,9 +13,6 @@ class MyOrdersScreen extends StatefulWidget {
 }
 
 class _MyOrdersScreenState extends State<MyOrdersScreen> {
-  final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
-
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -37,17 +33,16 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
 
     try {
       final accessToken =
-          await _secureStorage.read(key: 'access_token');
+          await secureStorage.read(key: 'access_token');
 
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception('Please sign in to view your orders.');
       }
 
-      final response = await http.get(
+      final response = await AuthenticatedHttpClient.instance.get(
         Uri.parse(ApiConfig.orders),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
         },
       );
 
@@ -747,10 +742,7 @@ class OrderDetailsScreen extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      const storage = FlutterSecureStorage();
-
-      final accessToken =
-          await storage.read(key: 'access_token');
+      final accessToken = await secureStorage.read(key: 'access_token');
 
       if (accessToken == null || accessToken.isEmpty) {
         throw Exception(
@@ -766,11 +758,10 @@ class OrderDetailsScreen extends StatelessWidget {
         );
       }
 
-      final response = await http.post(
+      final response = await AuthenticatedHttpClient.instance.post(
         Uri.parse('${ApiConfig.orders}$orderId/cancel/'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
         },
         body: jsonEncode({
           'remarks': 'Cancelled by hotel staff from the mobile app.',

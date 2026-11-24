@@ -1,26 +1,13 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'authenticated_http_client.dart';
 
 class HotelService {
-  final FlutterSecureStorage _storage =
-      const FlutterSecureStorage();
-
-  Future<Map<String, String>> _getHeaders() async {
-    final token = await _storage.read(key: 'access_token');
-
-    if (token == null || token.isEmpty) {
-      throw Exception('Authentication required. Please log in again.');
-    }
-
-    return {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    };
-  }
+  Map<String, String> _getHeaders() =>
+      const {'Content-Type': 'application/json'};
 
   dynamic _decodeResponse(http.Response response) {
     if (response.body.isEmpty) return null;
@@ -80,9 +67,9 @@ class HotelService {
   }
 
   Future<List<Map<String, dynamic>>> getHotels() async {
-    final response = await http.get(
+    final response = await AuthenticatedHttpClient.instance.get(
       Uri.parse('${ApiConfig.baseUrl}/hotels/'),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
     );
 
     _checkResponse(response);
@@ -95,9 +82,9 @@ class HotelService {
   Future<Map<String, dynamic>> getHotelDetails(
     int hotelId,
   ) async {
-    final response = await http.get(
+    final response = await AuthenticatedHttpClient.instance.get(
       Uri.parse('${ApiConfig.baseUrl}/hotels/$hotelId/'),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
     );
 
     _checkResponse(response);
@@ -111,9 +98,9 @@ class HotelService {
     required int hotelId,
     required String status,
   }) async {
-    final response = await http.patch(
+    final response = await AuthenticatedHttpClient.instance.patch(
       Uri.parse('${ApiConfig.baseUrl}/hotels/$hotelId/status/'),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
       body: jsonEncode({
         'status': status,
       }),

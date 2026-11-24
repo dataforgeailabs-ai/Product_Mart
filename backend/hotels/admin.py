@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Hotel
+from .models import Hotel, RestaurantPartnerRequest
 
 
 @admin.register(Hotel)
@@ -11,6 +11,7 @@ class HotelAdmin(admin.ModelAdmin):
         'phone',
         'city',
         'property_type',
+        'hotel_type',
         'status',
         'created_at',
     )
@@ -18,6 +19,7 @@ class HotelAdmin(admin.ModelAdmin):
     list_filter = (
         'status',
         'property_type',
+        'hotel_type',
         'state',
     )
 
@@ -36,3 +38,24 @@ class HotelAdmin(admin.ModelAdmin):
     )
 
     ordering = ('-created_at',)
+
+
+@admin.register(RestaurantPartnerRequest)
+class RestaurantPartnerRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "hotel",
+        "restaurant_name",
+        "restaurant_phone",
+        "fssai_number",
+        "status",
+        "requested_at",
+        "reviewed_by",
+    )
+    list_filter = ("status", "requested_at")
+    search_fields = (
+        "hotel__name",
+        "restaurant_name",
+        "restaurant_phone",
+        "fssai_number",
+    )
+    readonly_fields = ("requested_at", "reviewed_at", "reviewed_by")

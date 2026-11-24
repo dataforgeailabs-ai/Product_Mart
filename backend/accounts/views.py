@@ -32,6 +32,7 @@ class CurrentUserView(APIView):
                 "id": user.hotel.id,
                 "name": user.hotel.name,
                 "status": user.hotel.status,
+                "hotel_type": user.hotel.hotel_type,
             }
 
         return Response({

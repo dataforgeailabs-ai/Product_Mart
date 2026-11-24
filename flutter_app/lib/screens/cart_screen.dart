@@ -1,11 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-
 import '../config/api_config.dart';
 import '../models/cart_item.dart';
+import '../services/authenticated_http_client.dart';
 import '../services/cart_service.dart';
 import 'checkout_screen.dart';
 
@@ -18,11 +16,8 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   final CartService _cartService = CartService();
-  final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
 
   List<CartItem> _items = [];
-  final Map<int, int> _serverItemIds = {};
 
   bool _isLoading = true;
   bool _isUpdating = false;
@@ -49,24 +44,12 @@ class _CartScreenState extends State<CartScreen> {
     _loadCart();
   }
 
-  Future<Map<String, String>> _getHeaders() async {
-    final accessToken = await _secureStorage.read(
-      key: 'access_token',
-    );
-
-    if (accessToken == null || accessToken.isEmpty) {
-      throw Exception('Please sign in to access your server cart.');
-    }
-
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $accessToken',
-    };
-  }
+  Map<String, String> _getHeaders() =>
+      const {'Content-Type': 'application/json'};
 
   Future<void> _loadCart() async {
     try {
-      final accessToken = await _secureStorage.read(
+      final accessToken = await secureStorage.read(
         key: 'access_token',
       );
 
@@ -78,7 +61,6 @@ class _CartScreenState extends State<CartScreen> {
         setState(() {
           _isLoggedIn = false;
           _items = guestItems;
-          _serverItemIds.clear();
           _isLoading = false;
           _error = null;
         });
@@ -86,9 +68,9 @@ class _CartScreenState extends State<CartScreen> {
         return;
       }
 
-      final response = await http.get(
+      final response = await AuthenticatedHttpClient.instance.get(
         Uri.parse(ApiConfig.cart),
-        headers: await _getHeaders(),
+        headers: _getHeaders(),
       );
 
       if (response.statusCode != 200) {
@@ -111,7 +93,6 @@ class _CartScreenState extends State<CartScreen> {
       }
 
       final List<CartItem> serverItems = [];
-      final Map<int, int> itemIds = {};
 
       for (final rawItem in rawItems) {
         if (rawItem is! Map) {
@@ -120,48 +101,11 @@ class _CartScreenState extends State<CartScreen> {
 
         final item = Map<String, dynamic>.from(rawItem);
 
-        final productId = int.tryParse(
-          item['product'].toString(),
-        );
-
-        final cartItemId = int.tryParse(
-          item['id'].toString(),
-        );
-
-        final quantity = int.tryParse(
-          item['quantity'].toString(),
-        );
-
-        if (productId == null ||
-            cartItemId == null ||
-            quantity == null) {
+        try {
+          serverItems.add(CartItem.fromServerJson(item));
+        } on FormatException {
           continue;
         }
-
-        final price = double.tryParse(
-          item['product_price'].toString(),
-        );
-
-        if (price == null) {
-          continue;
-        }
-
-        serverItems.add(
-          CartItem(
-            productId: productId,
-            productName:
-                item['product_name']?.toString() ?? 'Product',
-            sku: item['product_sku']?.toString() ?? '',
-            price: price,
-            unit: 'unit',
-            minimumOrderQuantity: 1,
-            stockQuantity: 999999,
-            image: item['product_image']?.toString(),
-            quantity: quantity,
-          ),
-        );
-
-        itemIds[productId] = cartItemId;
       }
 
       if (!mounted) return;
@@ -169,9 +113,6 @@ class _CartScreenState extends State<CartScreen> {
       setState(() {
         _isLoggedIn = true;
         _items = serverItems;
-        _serverItemIds
-          ..clear()
-          ..addAll(itemIds);
         _isLoading = false;
         _error = null;
       });
@@ -199,17 +140,17 @@ class _CartScreenState extends State<CartScreen> {
       String? message;
 
       if (_isLoggedIn) {
-        final cartItemId = _serverItemIds[item.productId];
+        final cartItemId = item.serverCartItemId;
 
         if (cartItemId == null) {
           throw Exception('Server cart item ID not found.');
         }
 
-        final response = await http.patch(
+        final response = await AuthenticatedHttpClient.instance.patch(
           Uri.parse(
             '${ApiConfig.cart}items/$cartItemId/update/',
           ),
-          headers: await _getHeaders(),
+          headers: _getHeaders(),
           body: jsonEncode({
             'quantity': quantity,
           }),
@@ -265,17 +206,17 @@ class _CartScreenState extends State<CartScreen> {
 
     try {
       if (_isLoggedIn) {
-        final cartItemId = _serverItemIds[item.productId];
+        final cartItemId = item.serverCartItemId;
 
         if (cartItemId == null) {
           throw Exception('Server cart item ID not found.');
         }
 
-        final response = await http.delete(
+        final response = await AuthenticatedHttpClient.instance.delete(
           Uri.parse(
             '${ApiConfig.cart}items/$cartItemId/remove/',
           ),
-          headers: await _getHeaders(),
+          headers: _getHeaders(),
         );
 
         if (response.statusCode != 200) {
@@ -364,7 +305,7 @@ class _CartScreenState extends State<CartScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Clear cart?'),
         content: const Text(
-          'This will remove all products from your cart.',
+          'This will remove all items from your cart.',
         ),
         actions: [
           TextButton(
@@ -388,15 +329,15 @@ class _CartScreenState extends State<CartScreen> {
     try {
       if (_isLoggedIn) {
         for (final item in List<CartItem>.from(_items)) {
-          final cartItemId = _serverItemIds[item.productId];
+          final cartItemId = item.serverCartItemId;
 
           if (cartItemId == null) continue;
 
-          final response = await http.delete(
+          final response = await AuthenticatedHttpClient.instance.delete(
             Uri.parse(
               '${ApiConfig.cart}items/$cartItemId/remove/',
             ),
-            headers: await _getHeaders(),
+            headers: _getHeaders(),
           );
 
           if (response.statusCode != 200) {
@@ -585,7 +526,7 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text('SKU: ${item.sku}'),
+                Text(item.itemType == 'FOOD' ? 'Food item' : 'SKU: ${item.sku}'),
                 const SizedBox(height: 4),
                 Text(
                   '₹${item.price.toStringAsFixed(2)} / ${item.unit}',

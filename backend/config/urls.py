@@ -33,6 +33,9 @@ urlpatterns = [
 
     # Cart APIs
     path('api/cart/', include('cart.urls')),
+
+    # Food APIs
+    path("api/food/", include("food.urls")),
 ]
 
 # Serve uploaded media files during development

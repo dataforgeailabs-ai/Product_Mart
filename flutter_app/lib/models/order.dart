@@ -15,6 +15,8 @@ class Order {
   final List<Map<String, dynamic>> statusHistory;
   final List<Map<String, dynamic>> payments;
   final String notes;
+  final int? checkoutId;
+  final String? checkoutNo;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -35,6 +37,8 @@ class Order {
     required this.statusHistory,
     required this.payments,
     required this.notes,
+    this.checkoutId,
+    this.checkoutNo,
     this.createdAt,
     this.updatedAt,
   });
@@ -71,6 +75,10 @@ class Order {
       updatedAt: DateTime.tryParse(
         json['updated_at']?.toString() ?? '',
       ),
+      checkoutId: json['checkout'] == null
+        ? null
+        : int.tryParse(json['checkout'].toString()),
+      checkoutNo: json['checkout_no']?.toString(),
     );
   }
 

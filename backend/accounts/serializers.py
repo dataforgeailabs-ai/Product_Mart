@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from hotels.models import Hotel
+from hotels.models import Hotel, RestaurantPartnerRequest
 
 User = get_user_model()
 
@@ -28,6 +28,34 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     property_type = serializers.CharField(max_length=100, write_only=True)
+    partnership_requested = serializers.BooleanField(
+        required=False,
+        default=False,
+        write_only=True,
+    )
+    restaurant_name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    restaurant_phone = serializers.CharField(
+        max_length=15,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    fssai_number = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    restaurant_description = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
 
     class Meta:
         model = User
@@ -47,10 +75,47 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "pin_code",
             "gst_number",
             "property_type",
+            "partnership_requested",
+            "restaurant_name",
+            "restaurant_phone",
+            "fssai_number",
+            "restaurant_description",
         ]
         read_only_fields = ["id"]
 
+    def validate(self, attrs):
+        # Registration is always a customer hotel. Classification changes
+        # are deliberately restricted to the protected hotel-management API.
+        if self.initial_data.get("hotel_type") == Hotel.HotelType.FOOD_PARTNER:
+            raise serializers.ValidationError(
+                {"hotel_type": "Food partners must be created by an admin."}
+            )
+        if attrs.get("partnership_requested", False):
+            required_fields = {
+                "restaurant_phone": "Restaurant contact number is required.",
+                "fssai_number": "FSSAI licence number is required.",
+                "restaurant_description": "Restaurant description is required.",
+            }
+            errors = {
+                field: message
+                for field, message in required_fields.items()
+                if not attrs.get(field, "").strip()
+            }
+            if errors:
+                raise serializers.ValidationError(errors)
+        return attrs
+
     def create(self, validated_data):
+        partnership_requested = validated_data.pop(
+            "partnership_requested",
+            False,
+        )
+        restaurant_request_data = {
+            "restaurant_name": validated_data.pop("restaurant_name", ""),
+            "restaurant_phone": validated_data.pop("restaurant_phone", ""),
+            "fssai_number": validated_data.pop("fssai_number", ""),
+            "description": validated_data.pop("restaurant_description", ""),
+        }
         # Extract hotel details before creating the user.
         hotel_data = {
             "name": validated_data.pop("hotel_name"),
@@ -67,7 +132,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         password = validated_data.pop("password")
 
-        # Create the hotel/resort and user atomically.
+        # Create the hotel and customer atomically.
         from django.db import transaction
 
         with transaction.atomic():
@@ -81,7 +146,14 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             user.hotel = hotel
             user.save()
 
+            if partnership_requested:
+                RestaurantPartnerRequest.objects.create(
+                    hotel=hotel,
+                    **restaurant_request_data,
+                )
+
         return user
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -117,8 +189,10 @@ class HotelDetailsSerializer(serializers.ModelSerializer):
             "pin_code",
             "gst_number",
             "property_type",
+            "hotel_type",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "hotel_type"]
+
 
 class ManagedUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(

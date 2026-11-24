@@ -1,26 +1,14 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/order.dart';
+import 'authenticated_http_client.dart';
 
 class OrderService {
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
-
-  Future<Map<String, String>> _getHeaders() async {
-    final accessToken = await _storage.read(key: 'access_token');
-
-    if (accessToken == null || accessToken.isEmpty) {
-      throw Exception('Authentication required. Please sign in again.');
-    }
-
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $accessToken',
-    };
-  }
+  Map<String, String> _getHeaders() =>
+      const {'Content-Type': 'application/json'};
 
   dynamic _decodeResponse(http.Response response) {
     try {
@@ -45,9 +33,9 @@ class OrderService {
   }
 
   Future<List<Order>> getOrders() async {
-    final response = await http.get(
+    final response = await AuthenticatedHttpClient.instance.get(
       Uri.parse(ApiConfig.orders),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
     );
 
     if (response.statusCode != 200) {
@@ -65,7 +53,6 @@ class OrderService {
           .toList();
     }
 
-    // Supports Django REST Framework paginated responses.
     if (data is Map<String, dynamic> && data['results'] is List) {
       return (data['results'] as List)
           .map((item) => Order.fromJson(
@@ -78,9 +65,9 @@ class OrderService {
   }
 
   Future<Order> getOrderDetails(int orderId) async {
-    final response = await http.get(
+    final response = await AuthenticatedHttpClient.instance.get(
       Uri.parse('${ApiConfig.orders}$orderId/'),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
     );
 
     final data = _decodeResponse(response);
@@ -90,6 +77,81 @@ class OrderService {
     }
 
     return Order.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  // Fetch checkouts assigned to the logged-in delivery user.
+  // Use OUT_FOR_DELIVERY for active deliveries and DELIVERED for history.
+  Future<List<Map<String, dynamic>>> getMyDeliveries({
+    String status = 'OUT_FOR_DELIVERY',
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.orders}checkouts/my-deliveries/',
+    ).replace(queryParameters: {'status': status});
+
+    final response = await AuthenticatedHttpClient.instance.get(
+      uri,
+      headers: _getHeaders(),
+    );
+
+    final data = _decodeResponse(response);
+
+    if (response.statusCode != 200) {
+      throw Exception(_getErrorMessage(data));
+    }
+
+    if (data is Map<String, dynamic> && data['results'] is List) {
+      return (data['results'] as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    }
+
+    throw Exception('Unexpected deliveries response format.');
+  }
+
+  // Fetch complete checkout details.
+  Future<Map<String, dynamic>> getCheckoutDetails(
+    int checkoutId,
+  ) async {
+    final response = await AuthenticatedHttpClient.instance.get(
+      Uri.parse('${ApiConfig.orders}checkouts/$checkoutId/'),
+      headers: _getHeaders(),
+    );
+
+    final data = _decodeResponse(response);
+
+    if (response.statusCode != 200) {
+      throw Exception(_getErrorMessage(data));
+    }
+
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  // Assign a delivery person to a checkout.
+  Future<void> assignDeliveryPerson(
+    int checkoutId,
+    int deliveryUserId,
+  ) async {
+    await _postAction(
+      'checkouts/$checkoutId/assign-delivery/',
+      body: {
+        'delivery_user_id': deliveryUserId,
+      },
+    );
+  }
+
+  // Dispatch checkout or mark it as delivered.
+  Future<void> updateCheckoutDeliveryStatus(
+    int checkoutId,
+    String status, {
+    String remarks = '',
+  }) async {
+    await _postAction(
+      'checkouts/$checkoutId/delivery-status/',
+      body: {
+        'status': status,
+        'remarks': remarks,
+      },
+    );
   }
 
   Future<void> confirmOrder(int orderId) async {
@@ -128,9 +190,9 @@ class OrderService {
     String endpoint, {
     Map<String, dynamic>? body,
   }) async {
-    final response = await http.post(
+    final response = await AuthenticatedHttpClient.instance.post(
       Uri.parse('${ApiConfig.orders}$endpoint'),
-      headers: await _getHeaders(),
+      headers: _getHeaders(),
       body: jsonEncode(body ?? {}),
     );
 

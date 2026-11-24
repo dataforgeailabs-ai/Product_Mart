@@ -1,27 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../main.dart' show secureStorage, LoginScreen;
+import '../main.dart' show logoutAndOpenLogin;
 import 'admin_orders_screen.dart';
 import 'admin_products_screen.dart';
 import 'admin_categories_screen.dart';
 import 'admin_hotels_screen.dart';
 import 'admin_users_screen.dart';
+import 'restaurant_food_management_screen.dart';
+import 'admin_restaurant_partner_requests_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
 
   Future<void> _logout(BuildContext context) async {
-    await secureStorage.delete(key: 'access_token');
-    await secureStorage.delete(key: 'refresh_token');
-
-    if (!context.mounted) return;
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
-      (route) => false,
-    );
+    await logoutAndOpenLogin(context);
   }
 
   @override
@@ -98,6 +90,41 @@ class AdminDashboardScreen extends StatelessWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const AdminProductsScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.restaurant_menu_outlined),
+              title: const Text('Food Management'),
+              subtitle: const Text(
+                'Manage restaurant food items and categories.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const RestaurantFoodManagementScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.fact_check_outlined),
+              title: const Text('Restaurant Partnership Requests'),
+              subtitle: const Text(
+                'Review applications to join Misty Go as a restaurant.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const AdminRestaurantPartnerRequestsScreen(),
                   ),
                 );
               },
