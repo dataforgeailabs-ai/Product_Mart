@@ -56,6 +56,8 @@ export default function Navbar() {
           <div className="hidden md:flex">
             <a
               href={APK_DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center gap-2 px-5 py-2 bg-[#C41E34] text-white text-sm font-semibold rounded-full hover:bg-[#9B1728] transition-all shadow-md hover:shadow-lg"
             >
               <Download size={16} />
@@ -93,6 +95,8 @@ export default function Navbar() {
           <div className="pt-2">
             <a
               href={APK_DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full px-5 py-3 bg-[#C41E34] text-white text-sm font-semibold rounded-full hover:bg-[#9B1728] transition-all"
             >
               <Download size={16} />

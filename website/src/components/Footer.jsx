@@ -66,6 +66,8 @@ export default function Footer() {
             </p>
             <a
               href={APK_DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-6 py-3 bg-[#C41E34] text-white text-sm font-semibold rounded-full hover:bg-[#9B1728] transition-all shadow-md"
             >
               <Download size={16} />

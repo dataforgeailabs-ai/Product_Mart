@@ -1,9 +1,9 @@
 // APK download URL — update this single constant for new releases
 export const APK_DOWNLOAD_URL =
-  'https://github.com/dataforgeailabs-ai/Product_Mart/releases/download/v1.0.0-beta.2/app-release.apk';
+  'https://github.com/dataforgeailabs-ai/Product_Mart/releases/download/v1.0.0-beta.3/app-release.apk';
 
-export const APK_VERSION = 'v1.0.0 Beta 2';
-export const APK_SIZE = '50.6 MB';
+export const APK_VERSION = 'v1.0.0 Beta 3';
+export const APK_SIZE = '51.81 MB';
 export const APK_RELEASE_DATE = 'November 2026';
 
 export const GITHUB_REPO_URL =

@@ -67,6 +67,8 @@ export default function Hero() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <a
                 href={APK_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2.5 px-8 py-4 bg-[#C41E34] text-white font-semibold rounded-full hover:bg-[#9B1728] transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-base"
               >
                 <Download size={20} />

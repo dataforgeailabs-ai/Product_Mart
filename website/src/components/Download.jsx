@@ -82,6 +82,8 @@ export default function DownloadSection() {
               {/* Download button */}
               <a
                 href={APK_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2.5 px-7 py-3.5 bg-[#C41E34] text-white font-bold rounded-full hover:bg-[#9B1728] transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-sm flex-shrink-0 whitespace-nowrap"
               >
                 <Download size={18} />
