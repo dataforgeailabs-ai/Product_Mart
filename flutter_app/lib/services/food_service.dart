@@ -140,12 +140,13 @@ class FoodService {
     image: image,
   );
 
-  Future<void> deactivateFoodCategory(int id) async {
-    final response = await AuthenticatedHttpClient.instance.delete(
-      Uri.parse('${ApiConfig.foodCategories}$id/'),
+  Future<FoodCategory> setFoodCategoryActive(int id, bool active) async {
+    final response = await AuthenticatedHttpClient.instance.post(
+      Uri.parse('${ApiConfig.foodCategories}$id/${active ? 'activate' : 'deactivate'}/'),
       headers: _headers(),
     );
     _check(response);
+    return FoodCategory.fromJson(Map<String, dynamic>.from(_decode(response) as Map));
   }
 
   Future<FoodCategory> _saveCategory({

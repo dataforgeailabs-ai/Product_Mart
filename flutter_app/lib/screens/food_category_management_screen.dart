@@ -66,12 +66,12 @@ class _FoodCategoryManagementScreenState
     await _loadCategories();
   }
 
-  Future<void> _deactivate(FoodCategory category) async {
+  Future<void> _setActive(FoodCategory category, bool active) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Deactivate Food Category'),
-        content: Text('Deactivate "${category.name}"?'),
+        title: Text('${active ? 'Activate' : 'Deactivate'} Food Category'),
+        content: Text('${active ? 'Activate' : 'Deactivate'} "${category.name}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -79,18 +79,18 @@ class _FoodCategoryManagementScreenState
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Deactivate'),
+            child: Text(active ? 'Activate' : 'Deactivate'),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _service.deactivateFoodCategory(category.id);
+      await _service.setFoodCategoryActive(category.id, active);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Food category deactivated successfully.'),
+        SnackBar(
+          content: Text('Food category ${active ? 'activated' : 'deactivated'} successfully.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -99,7 +99,7 @@ class _FoodCategoryManagementScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to deactivate category: $error'),
+          content: Text('Unable to update category: $error'),
           backgroundColor: Colors.red,
         ),
       );
@@ -180,7 +180,8 @@ class _FoodCategoryManagementScreenState
             PopupMenuButton<String>(
               onSelected: (action) {
                 if (action == 'edit') _openForm(category: category);
-                if (action == 'deactivate') _deactivate(category);
+                if (action == 'deactivate') _setActive(category, false);
+                if (action == 'activate') _setActive(category, true);
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(
@@ -203,6 +204,11 @@ class _FoodCategoryManagementScreenState
                         Text('Deactivate'),
                       ],
                     ),
+                  ),
+                if (!category.isActive)
+                  const PopupMenuItem(
+                    value: 'activate',
+                    child: Row(children: [Icon(Icons.check_circle_outline, color: Colors.green), SizedBox(width: 8), Text('Activate')]),
                   ),
               ],
             ),

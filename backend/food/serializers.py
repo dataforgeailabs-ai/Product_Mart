@@ -41,6 +41,8 @@ class FoodCategorySerializer(serializers.ModelSerializer):
             return value
 
         if not value.is_active:
+            if self.instance and value.pk == self.instance.parent_category_id:
+                return value
             raise serializers.ValidationError(
                 "Cannot assign an inactive parent category."
             )
@@ -50,14 +52,31 @@ class FoodCategorySerializer(serializers.ModelSerializer):
                 "A category cannot be its own parent."
             )
 
-        if self.instance and value.pk in self.instance.subcategories.values_list(
-            "id",
-            flat=True,
-        ):
-            raise serializers.ValidationError(
-                "A category cannot be assigned to one of its own subcategories."
-            )
+        # Walk the proposed parent's ancestors. This prevents arbitrary-depth
+        # cycles (including assigning a descendant as this category's parent).
+        if self.instance:
+            ancestor = value
+            seen = set()
+            while ancestor is not None:
+                if ancestor.pk == self.instance.pk:
+                    raise serializers.ValidationError(
+                        "A category cannot be assigned beneath one of its descendants."
+                    )
+                if ancestor.pk in seen:
+                    raise serializers.ValidationError(
+                        "The selected parent already has a circular relationship."
+                    )
+                seen.add(ancestor.pk)
+                ancestor = ancestor.parent_category
 
+        return value
+
+    def validate_is_active(self, value):
+        request = self.context.get("request")
+        if request and request.method in ("POST", "PUT", "PATCH"):
+            from accounts.models import User
+            if request.user.role not in (User.Role.ADMIN, User.Role.SUPERADMIN):
+                raise serializers.ValidationError("Only admins can change category status.")
         return value
 
 

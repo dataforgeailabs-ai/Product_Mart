@@ -1,6 +1,8 @@
 from rest_framework import viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from .models import FoodCategory, FoodItem
 from .serializers import (
@@ -34,10 +36,29 @@ class FoodCategoryViewSet(viewsets.ModelViewSet):
             "update",
             "partial_update",
             "destroy",
+            "activate",
+            "deactivate",
         ]:
             return [IsAuthenticated(), IsAdmin()]
 
         return [AllowAny()]
+
+    @action(detail=True, methods=["post"])
+    def activate(self, request, pk=None):
+        category = self.get_object()
+        category.is_active = True
+        category.save(update_fields=["is_active", "updated_at"])
+        return self._status_response(category)
+
+    @action(detail=True, methods=["post"])
+    def deactivate(self, request, pk=None):
+        category = self.get_object()
+        category.is_active = False
+        category.save(update_fields=["is_active", "updated_at"])
+        return self._status_response(category)
+
+    def _status_response(self, category):
+        return Response(self.get_serializer(category).data)
 
     def perform_destroy(self, instance):
         instance.is_active = False

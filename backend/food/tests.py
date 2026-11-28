@@ -315,6 +315,49 @@ class FoodAuthorizationTests(APITestCase):
             category = FoodCategory.objects.get(pk=category_id)
             self.assertFalse(category.is_active)
 
+    def test_category_activation_is_admin_only_and_individual(self):
+        inactive = FoodCategory.objects.create(name="Safe Activation", is_active=False)
+        other = FoodCategory.objects.create(name="Remains Inactive", is_active=False)
+        for user in (self.admin, self.superadmin):
+            self.client.force_authenticate(user)
+            response = self.client.post(
+                reverse("food-category-activate", args=[inactive.pk]), {}, format="json"
+            )
+            self.assertEqual(response.status_code, 200)
+            inactive.refresh_from_db()
+            self.assertTrue(inactive.is_active)
+            self.assertFalse(other.is_active)
+            response = self.client.post(
+                reverse("food-category-deactivate", args=[inactive.pk]), {}, format="json"
+            )
+            self.assertEqual(response.status_code, 200)
+            inactive.refresh_from_db()
+            self.assertFalse(inactive.is_active)
+
+        self.client.force_authenticate(self.partner)
+        denied = self.client.post(
+            reverse("food-category-activate", args=[inactive.pk]), {}, format="json"
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_category_parent_rejects_self_and_nested_cycles(self):
+        parent = FoodCategory.objects.create(name="Parent")
+        child = FoodCategory.objects.create(name="Child", parent_category=parent)
+        grandchild = FoodCategory.objects.create(name="Grandchild", parent_category=child)
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.patch(
+            reverse("food-category-detail", args=[parent.pk]),
+            {"parent_category": parent.pk}, format="json"
+        ).status_code, 400)
+        self.assertEqual(self.client.patch(
+            reverse("food-category-detail", args=[parent.pk]),
+            {"parent_category": grandchild.pk}, format="json"
+        ).status_code, 400)
+        self.assertEqual(self.client.patch(
+            reverse("food-category-detail", args=[grandchild.pk]),
+            {"parent_category": parent.pk}, format="json"
+        ).status_code, 200)
+
     def test_public_food_listing_excludes_unavailable_inactive_and_inactive_hotels(self):
         unavailable = self._food(self.partner_hotel, "Unavailable")
         unavailable.is_available = False

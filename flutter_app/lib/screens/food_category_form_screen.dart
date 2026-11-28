@@ -259,10 +259,7 @@ class _FoodCategoryFormScreenState extends State<FoodCategoryFormScreen> {
                               child: Text('No parent category'),
                             ),
                             ..._categories
-                                .where((item) =>
-                                    (item.isActive ||
-                                        item.id == _parentCategory) &&
-                                    item.id != _category?.id)
+                                .where((item) => item.id != _category?.id)
                                 .map(
                                   (item) => DropdownMenuItem<int?>(
                                     value: item.id,
